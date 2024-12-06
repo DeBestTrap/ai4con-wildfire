@@ -11,6 +11,9 @@ DEFAULT = A.Compose([
 ])
 
 class SatteliteImageDataset(Dataset):
+    augment_transform: A.Compose
+    preprocess_transform: A.Compose
+
     def __init__(self, data_dir: str, preprocess_transform: A.Compose=DEFAULT, transform: A.Compose=None) -> None:
         self.data_dir = data_dir
         self.preprocess_transform = preprocess_transform

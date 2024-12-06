@@ -8,3 +8,14 @@ data/
 ```
 
 they are stored as floats from 0 to 1 representing the intensity of the channel
+
+# training
+start visdom server in a seperate terminal
+```bash
+python -m visdom.server
+```
+
+another terminal
+```bash
+python main.py
+```

@@ -1,4 +1,7 @@
+import random
+import torch
 from torch.utils.data import DataLoader, random_split
+
 from lib.dataset import SatteliteImageDataset
 
 class SatelliteImageDataLoader:
@@ -6,11 +9,14 @@ class SatelliteImageDataLoader:
     val_dataset: SatteliteImageDataset
     test_dataset: SatteliteImageDataset
 
-    def __init__(self, data_dir, batch_size=32, train_ratio=0.7, val_ratio=0.15, test_ratio=0.15, preprocess_transform=None, transform=None):
+    def __init__( self, data_dir, batch_size=32, train_ratio=0.7, val_ratio=0.15, test_ratio=0.15, seed=None, preprocess_transform=None, transform=None,):
         self.data_dir = data_dir
         self.batch_size = batch_size
         self.preprocess_transform = preprocess_transform
         self.augment_transform = transform
+        self.seed = ( seed if seed is not None else random.randint(0, 2**32 - 1))  # Generate a random seed if not provided
+        self.gen = torch.Generator()
+        self.gen.manual_seed(self.seed)
 
         # create the full dataset
         self.full_dataset = SatteliteImageDataset(data_dir, preprocess_transform)
@@ -26,14 +32,14 @@ class SatelliteImageDataLoader:
 
         # split the dataset
         self.train_dataset, self.val_dataset, self.test_dataset = random_split(
-            self.full_dataset, [train_size, val_size, test_size]
+            self.full_dataset, [train_size, val_size, test_size], generator=self.gen
         )
 
-        # Add the augmentations to only train dataset
+        # Add the augmentations to only the train dataset
         self.train_dataset.augment_transform = self.augment_transform
 
     def get_train_dataloader(self):
-        return DataLoader(self.train_dataset, batch_size=self.batch_size, shuffle=True)
+        return DataLoader( self.train_dataset, batch_size=self.batch_size, shuffle=True, generator=self.gen)
 
     def get_val_dataloader(self):
         return DataLoader(self.val_dataset, batch_size=self.batch_size, shuffle=False)
@@ -43,3 +49,6 @@ class SatelliteImageDataLoader:
 
     def get_all_loaders(self):
         return self.get_train_dataloader(), self.get_val_dataloader(), self.get_test_dataloader()
+
+    def __len__(self) -> int:
+        return len(self.full_dataset)
