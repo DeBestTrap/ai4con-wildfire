@@ -4,6 +4,8 @@ from torch.utils.data import DataLoader
 from visdom import Visdom
 from tqdm import tqdm
 
+from lib.debug import *
+
 
 def train_one_epoch(
     model: torch.nn.Module,
@@ -25,18 +27,22 @@ def train_one_epoch(
     Returns:
         float: The average loss for the epoch.
     """
-    # test return
-    time.sleep(0.25)
-    return 1.0
     model.train()
     running_loss = 0.0
-    for images, masks in train_loader:
-        images, masks = images.to(device), masks.to(device)
+    for images, masks in tqdm(train_loader):
+        images: torch.Tensor = images.to(device)
+        masks: torch.Tensor = masks.to(device)
+        masks = masks.where(masks < 2, 0).float()
 
         optimizer.zero_grad()
-        outputs = model(images)
+        main_outputs = model(images)['out'].squeeze(1)
+        aux_outputs = model(images)['aux'].squeeze(1)
+        # outputs = model(images).squeeze(1)
 
-        loss = criterion(outputs, masks)
+        # loss = criterion(outputs, masks)
+        main_loss = criterion(main_outputs, masks)
+        aux_loss = criterion(aux_outputs, masks)
+        loss = main_loss + 0.4 * aux_loss
         loss.backward()
         optimizer.step()
 
@@ -75,7 +81,6 @@ def train_multiple_epochs(
         avg_epoch_loss = train_one_epoch(
             model, train_loader, criterion, optimizer, device
         )
-        print(f"Average loss for epoch {epoch + 1}: {avg_epoch_loss}")
 
         # Validation
 
@@ -84,5 +89,8 @@ def train_multiple_epochs(
         visdom_instance.line(
             Y=[avg_epoch_loss], X=[epoch], win=line_win, update="append"
         )
+
+    # Save the model
+    torch.save(model.state_dict(), "model.pt")
 
     print("Training complete!")

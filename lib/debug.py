@@ -58,7 +58,7 @@ def get_highlighted_mask(mask: np.ndarray, only_burned=False) -> np.ndarray:
     return color_mask
 
 
-def plot_mask(mask):
+def plot_mask(mask: np.ndarray) -> None:
     # Get the color mask
     color_mask = get_highlighted_mask(mask)
 
@@ -69,7 +69,7 @@ def plot_mask(mask):
     plt.show()
 
 
-def plot_burned_area_mask(mask):
+def plot_burned_area_mask(mask: np.ndarray | torch.Tensor) -> None:
     mask = convert_to_numpy(mask)
 
     plt.figure(figsize=(10, 10))

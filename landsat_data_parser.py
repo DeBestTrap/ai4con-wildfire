@@ -3,8 +3,9 @@ import os
 import rasterio
 import matplotlib.pyplot as plt
 import numpy as np
+from tqdm import tqdm
 
-from lib.debug import plot_rgb, plot_rgb_norm, plot_highlighted_rgb
+from lib.debug import plot_rgb, plot_rgb_float, plot_highlighted_rgb_and_mask
 
 def load_rgb_bands(dir:str, instance:str) -> np.ndarray:
     '''
@@ -89,48 +90,84 @@ def extract_blocks(image, block_size):
             blocks.append(block)
     return blocks
 
+def extract_blocks_from_dir(dir, instance, block_size):
+    # instance = "LC09_CU_011002_20241108_20241113_02"
+    # instance = "LC09_CU_011003_20241108_20241113_02"
+    rgb_norm, burned_area_mask = get_rgb_and_mask(dir, instance)
 
-dir = "/home/tyler/Downloads/landsat/a"
-instance = "LC09_CU_011002_20241108_20241113_02"
-# instance = "LC09_CU_011003_20241108_20241113_02"
+    # Return if both mask and RGB don't exist
+    if rgb_norm is None or burned_area_mask is None:
+        return
+
+    if DEBUG:
+        # plot_burned_area_mask(burned_area_mask)
+        plot_highlighted_rgb_and_mask(rgb_norm, burned_area_mask)
+
+        # plot dist of each channel
+        for i in range(3):
+            plt.figure(figsize=(10, 10))
+            plt.hist(rgb_norm[:, :, i].flatten()[rgb_norm[:, :, i].flatten() != 0], bins=256)
+            plt.show()
+
+    # Extract blocks from the RGB image and mask
+    rgb_blocks = extract_blocks(rgb_norm, block_size)
+    mask_blocks = extract_blocks(burned_area_mask, block_size)
+
+    # Make a directory to save the blocks
+    save_dir = "new_data/"
+    if not os.path.exists(save_dir):
+        os.makedirs(save_dir)
+
+    # save idxes of blocks that have something
+    something_idxes = [i for i, rgb_block in enumerate(rgb_blocks) if np.sum(rgb_block) > 0]
+    for idx in something_idxes:
+        data = {
+            "rgb": rgb_blocks[idx],
+            "mask": mask_blocks[idx]
+        }
+        np.savez(f"{save_dir}/{instance}_block_{idx}.npz", **data)
+
+
 # List of band files
 BANDS = [
     "_SR_B4.TIF",  # Red
     "_SR_B3.TIF",  # Green
     "_SR_B2.TIF",  # Blue
 ]
+DEBUG = False
 
-rgb_norm, burned_area_mask = get_rgb_and_mask(dir, instance)
-# plot_burned_area_mask(burned_area_mask)
-plot_highlighted_rgb(rgb_norm, burned_area_mask)
+dir = "/mnt/csdrive/landsat/combined/"
 
-# %%
-# plot dist of each channel
-for i in range(3):
-    plt.figure(figsize=(10, 10))
-    plt.hist(rgb_norm[:, :, i].flatten()[rgb_norm[:, :, i].flatten() != 0], bins=256)
-    plt.show()
+# Search for instances
+instances = set()
+for file in os.listdir(dir):
+    if file.endswith(".TIF"):
+        instance = "_".join(file.split("_")[0:6])
+        instances.add(instance)
+print(f"Found {len(instances)} instances")
 
-# %%
+# Iterate over instances and extract blocks into data folder
+for instance in tqdm(instances):
+    extract_blocks_from_dir(dir, instance, block_size=512)
 
-# Set block size
-B = 512  # Replace with desired block size
+'''
+# for copying instances that have both an image and mask
+import shutil
+def copy_all_files(instance, source_dir, target_dir):
+    for file in os.listdir(source_dir):
+        if instance in file:
+            source_path = os.path.join(source_dir, file)
+            target_path = os.path.join(target_dir, file)
+            shutil.copy2(source_path, target_path)
 
-# Extract blocks from the RGB image and mask
-rgb_blocks = extract_blocks(rgb_norm, B)
-mask_blocks = extract_blocks(burned_area_mask, B)
 
-# save idxes of blocks that have something
-something_idxes = [i for i, rgb_block in enumerate(rgb_blocks) if np.sum(rgb_block) > 0]
-save_dir = "data/"
-if not os.path.exists(save_dir):
-    os.makedirs(save_dir)
-for idx in something_idxes:
-    print(f"Saving block {idx}")
-    data = {
-        "rgb": rgb_blocks[idx],
-        "mask": mask_blocks[idx]
-    }
-    np.savez(f"{save_dir}/{instance}_block_{idx}.npz", **data)
+ctr = 0
+new_dir = "/mnt/csdrive/landsat/test/"
+for instance in instances:
+    if check_rgb_and_mask_exist(dir, instance):
+        copy_all_files(instance, dir, new_dir)
+        ctr += 1
 
-# %%
+    if ctr > 10:
+        break
+'''

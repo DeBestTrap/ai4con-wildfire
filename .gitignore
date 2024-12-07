@@ -1,4 +1,6 @@
 /data/
+/data_full/
+/data_full_burned/
 
 README.html
 __pycache__/
