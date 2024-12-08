@@ -148,7 +148,8 @@ def train():
     # criterion = FocalLoss(alpha=1, gamma=2)
     optimizer = torch.optim.AdamW(model.parameters(), lr=0.0001)
     num_epochs = 30
-    train_multiple_epochs(model, train_loader, criterion, optimizer, device, num_epochs, viz)
+    train_multiple_epochs(model, train_loader, val_loader,criterion, optimizer,
+                          device, num_epochs, viz)
 
 def show_an_output():
     # temp function

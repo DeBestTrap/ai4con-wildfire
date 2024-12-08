@@ -5,6 +5,7 @@ from visdom import Visdom
 from tqdm import tqdm
 
 from lib.debug import *
+from lib.evaluate import evaluate
 
 
 def train_one_epoch(
@@ -53,6 +54,7 @@ def train_one_epoch(
 def train_multiple_epochs(
     model: torch.nn.Module,
     train_loader: DataLoader,
+    val_loader: DataLoader,
     criterion: torch.nn.Module,
     optimizer: torch.optim.Optimizer,
     device: torch.device,
@@ -65,6 +67,7 @@ def train_multiple_epochs(
     Parameters:
         model (torch.nn.Module): The model to train.
         train_loader (DataLoader): The DataLoader for the training set.
+        val_loader(DataLoader): The DataLoader for the validation set.
         criterion (torch.nn.Module): The loss function.
         optimizer (torch.optim.Optimizer): The optimizer to use for training.
         device (torch.device): The device to use for training.
@@ -74,7 +77,23 @@ def train_multiple_epochs(
 
     # Book-keeping
     training_losses = []
-    line_win = visdom_instance.line(Y=[0], X=[0], opts=dict(title="Training Loss"))
+    val_losses = []
+    iou_scores = []
+    dice_scores = []
+    pixel_accuracies = []
+
+    train_win = visdom_instance.line(Y=[0], X=[0], opts=dict(title="Training Loss"))
+    val_loss_win = visdom_instance.line(Y=[0], X=[0], opts=dict(title="Validation Loss"))
+    metrics_win = visdom_instance.line(
+        Y=[[0, 0, 0]],
+        X=[0],
+        opts=dict(
+            title="Validation Metrics",
+            legend=["IoU", "Dice", "Pixel Accuracy"],
+            xlabel="Epoch",
+            ylabel="Metric Value",
+        ),
+    )
 
     for epoch in tqdm(range(num_epochs)):
         # Training
@@ -83,11 +102,28 @@ def train_multiple_epochs(
         )
 
         # Validation
+        val_results = evaluate(model, val_loader, criterion, device)
+        avg_val_loss, avg_iou, avg_dice, avg_pixel_acc = val_results
 
         # Book-keeping
         training_losses.append(avg_epoch_loss)
+        val_losses.append(avg_val_loss)
+        iou_scores.append(avg_iou)
+        dice_scores.append(avg_dice)
+        pixel_accuracies.append(avg_pixel_acc)
+
+        # Update Visdom
         visdom_instance.line(
-            Y=[avg_epoch_loss], X=[epoch], win=line_win, update="append"
+            Y=[avg_epoch_loss], X=[epoch], win=train_win, update="append"
+        )
+        visdom_instance.line(
+            Y=[avg_val_loss], X=[epoch], win=val_loss_win, update="append"
+        )
+        visdom_instance.line(
+            Y=[[avg_iou, avg_dice, avg_pixel_acc]],
+            X=[epoch],
+            win=metrics_win,
+            update="append",
         )
 
     # Save the model
