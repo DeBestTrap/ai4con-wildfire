@@ -1,6 +1,7 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
+import albumentations as A
 
 from lib.data import remove_filler_values, rgb_float_to_uint8
 
@@ -19,10 +20,24 @@ def convert_to_numpy(tensor: np.ndarray | torch.Tensor) -> np.ndarray:
         raise TypeError("tensor must be a numpy array or a torch tensor")
 
 
+def unprocess_image(tensor: np.ndarray | torch.Tensor, inverse_normalize_transform: A.Compose) -> np.ndarray:
+    """
+    Unprocess a tensor (C, H, W) that was used for training.
+    This is also assuming that the tensor is always normalized and will be denormalized.
+
+    Returns an image (H, W, C)
+    """
+    if type(tensor) == torch.Tensor:
+        tensor = tensor.detach().cpu().numpy()
+    
+    image = tensor.transpose(1, 2, 0)
+
+    return inverse_normalize_transform(image=image)['image']
+
 '''
 -------------------- Ploting functions for masks
 '''
-def get_highlighted_mask(mask: np.ndarray, only_burned=False) -> np.ndarray:
+def get_colored_mask(mask: np.ndarray, only_burned=False) -> np.ndarray:
     """
     Key:
         0:   No burned area      | (Black)
@@ -60,7 +75,7 @@ def get_highlighted_mask(mask: np.ndarray, only_burned=False) -> np.ndarray:
 
 def plot_mask(mask: np.ndarray) -> None:
     # Get the color mask
-    color_mask = get_highlighted_mask(mask)
+    color_mask = get_colored_mask(mask)
 
     # Display the color mask
     plt.figure(figsize=(10, 10))
@@ -81,18 +96,9 @@ def plot_burned_area_mask(mask: np.ndarray | torch.Tensor) -> None:
 '''
 -------------------- Ploting functions for RGB images
 '''
-def plot_rgb_float(rgb_norm: np.ndarray | torch.Tensor) -> None:
-    """
-    Plot a RGB image stored with float
-
-    Will raise an error if the image is not in the shape of (H, W, 3)
-    """
-    plot_rgb(rgb_float_to_uint8(rgb_norm))
-
-
 def plot_rgb(rgb: np.ndarray | torch.Tensor) -> None:
     """
-    Plot a RGB image stored with uint8
+    Plot a RGB image stored with uint8 [0, 255] or float [0, 1]
 
     Will raise an error if the image is not in the shape of (H, W, 3)
     """
@@ -101,45 +107,10 @@ def plot_rgb(rgb: np.ndarray | torch.Tensor) -> None:
     if rgb.shape[2] != 3:
         assert False, f"RGB image must be in the shape of (H, W, 3): {rgb.shape}"
 
-    plt.figure(figsize=(20, 20))
+    plt.figure(figsize=(10, 10))
     plt.imshow(rgb)
     plt.axis("off")
     plt.show()
-
-def denormalize(rgb: np.ndarray) -> np.ndarray:
-    """
-    Undo normalization for a tensor image and convert it to NumPy for plotting.
-    Args:
-        rgb: Normalized image tensor of shape (H, W, C).
-    Returns:
-        np.ndarray: Denormalized image as a NumPy array in the range [0, 1].
-    """
-    # Define mean and std used for normalization
-    mean = np.array([0.485, 0.456, 0.406])
-    std = np.array([0.229, 0.224, 0.225])
-
-    # Denormalize
-    rgb = (rgb * std) + mean
-
-    # Not sure why we need to multiply by 255
-    rgb = rgb*255
-
-    # Clip to [0, 1] range
-    rgb = np.clip(rgb, 0, 1)
-    return rgb
-
-
-def plot_preprocessed_rgb(rgb: np.ndarray | torch.Tensor, normalized: bool) -> None:
-    """
-    If the RGB image is preprocessed, undo the transformation
-    """
-    rgb = convert_to_numpy(rgb)
-    if rgb.shape[0] == 3:
-        rgb = rgb.transpose(1, 2, 0)
-    if normalized:
-        rgb = denormalize(rgb)
-    plot_rgb_float(rgb)
-
 
 
 '''
@@ -157,25 +128,10 @@ def plot_highlighted_rgb_and_mask(
     # Create an RGB composite with masked areas highlighted
     highlighted_rgb = rgb_float_to_uint8(rgb.copy())
     # Get the color mask
-    color_mask = get_highlighted_mask(mask, only_burned=only_burned)
+    color_mask = get_colored_mask(mask, only_burned=only_burned)
 
     # Highlight the masked areas in the RGB composite
     highlighted_rgb[color_mask != (0, 0, 0)] = color_mask[color_mask != (0, 0, 0)]
 
     # Plot
     plot_rgb(highlighted_rgb)
-
-def plot_highlighted_rgb_and_mask_preprocessed(
-    rgb: np.ndarray | torch.Tensor,
-    mask: np.ndarray | torch.Tensor,
-    normalized: bool,
-    only_burned: bool = False,
-) -> None:
-    # Convert to numpy
-    rgb = convert_to_numpy(rgb)
-    mask = convert_to_numpy(mask)
-    if rgb.shape[0] == 3:
-        rgb = rgb.transpose(1, 2, 0)
-    if normalized:
-        rgb = denormalize(rgb)
-    plot_highlighted_rgb_and_mask(rgb, mask, only_burned=only_burned)

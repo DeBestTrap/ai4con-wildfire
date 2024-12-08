@@ -5,25 +5,28 @@ import matplotlib.pyplot as plt
 import numpy as np
 from tqdm import tqdm
 
-from lib.debug import plot_rgb, plot_rgb_float, plot_highlighted_rgb_and_mask
+from lib.data import seperate_visible_and_infrared
+from lib.debug import *
 
-def load_rgb_bands(dir:str, instance:str) -> np.ndarray:
+def load_image_bands(dir:str, instance:str) -> np.ndarray:
     '''
-    Load RGB bands
-    - They are in the following order: Red, Green, Blue
-    - Normalized to float values ranging from 0 to 1
+    Load image bands
+    - They are in the following order: Red, Green, Blue, NIR, SWIR1, SWIR2
+    - Converted to radiance values between [0, 1] float
     '''
-    # Load bands and stack
+    # Load bands and stack together to form image of (H, W, C)
     stacked_bands = []
     for band_file in BANDS:
         band_path = os.path.join(dir, f"{instance}{band_file}")
         with rasterio.open(band_path) as src:
             stacked_bands.append(src.read(1))
-    rgb = np.dstack(stacked_bands)
+    bands = np.dstack(stacked_bands)
 
-    # Normalize values
-    rgb_norm = (rgb / np.max(rgb)).astype(float)
-    return rgb_norm
+    # Convert from uint16 "Digital Number" to float [0, 1]
+    radiance = bands*2.75e-05 - 0.2
+    radiance = np.clip(radiance, 0, 1)
+
+    return radiance
 
 def load_burned_area_mask(dir:str, instance:str) -> np.ndarray:
     '''
@@ -40,26 +43,28 @@ def load_burned_area_mask(dir:str, instance:str) -> np.ndarray:
         burned_area_mask = src.read(1)
     return burned_area_mask
 
-def check_rgb_and_mask_exist(dir:str, instance:str) -> bool:
-    # Check if the directories of band images and mask exist
-    rgb_exists = True
+def check_image_and_mask_exist(dir:str, instance:str) -> bool:
+    '''
+    Check if the directories of band images and mask exist
+    '''
+    image_exists = True
     for band_file in BANDS:
-        rgb_path = os.path.join(dir, f"{instance}{band_file}")
-        rgb_exists = rgb_exists and os.path.exists(rgb_path)
+        image_path = os.path.join(dir, f"{instance}{band_file}")
+        image_exists = image_exists and os.path.exists(image_path)
     mask_path = os.path.join(dir, f"{instance}_BC.TIF")
     mask_exists = os.path.exists(mask_path)
-    return rgb_exists and mask_exists
+    return image_exists and mask_exists
 
-def get_rgb_and_mask(dir:str, instance:str) -> tuple[np.ndarray, np.ndarray]:
+def get_image_and_mask(dir:str, instance:str) -> tuple[np.ndarray, np.ndarray]:
     '''
-    Return the RGB image and mask if both folders exist
+    Return the image and mask if both folders exist
     '''
-    if not check_rgb_and_mask_exist(dir, instance):
+    if not check_image_and_mask_exist(dir, instance):
         return None, None
 
-    rgb_norm = load_rgb_bands(dir, instance)
+    image = load_image_bands(dir, instance)
     mask = load_burned_area_mask(dir, instance)
-    return rgb_norm, mask
+    return image, mask
 
 def extract_blocks(image, block_size):
     '''
@@ -71,15 +76,15 @@ def extract_blocks(image, block_size):
         h, w = image.shape 
         fill_value = 255
     else:
-        # If its a RGB image
-        h, w, _ = image.shape
+        # If its an image
+        h, w, c = image.shape
 
     for i in range(0, h, block_size):
         for j in range(0, w, block_size):
             block = image[i:i+block_size, j:j+block_size]
-            if len(image.shape) == 3 and block.shape != (block_size, block_size, 3):
-                # If its a RGB image, and the block is not the correct size, resize and fill with zeros
-                resized_block = np.zeros((block_size, block_size, 3), dtype=float)
+            if len(image.shape) == 3 and block.shape != (block_size, block_size, c):
+                # If its an image, and the block is not the correct size, resize and fill with zeros
+                resized_block = np.zeros((block_size, block_size, c), dtype=float)
                 resized_block[:block.shape[0], :block.shape[1], :] = block
                 block = resized_block
             elif len(image.shape) == 2 and block.shape != (block_size, block_size):
@@ -90,42 +95,67 @@ def extract_blocks(image, block_size):
             blocks.append(block)
     return blocks
 
-def extract_blocks_from_dir(dir, instance, block_size):
-    # instance = "LC09_CU_011002_20241108_20241113_02"
-    # instance = "LC09_CU_011003_20241108_20241113_02"
-    rgb_norm, burned_area_mask = get_rgb_and_mask(dir, instance)
+def extract_blocks_from_dir(dir, instance, block_size, extract_only_burned=False) -> bool:
+    '''
+    Extracts smaller blocks from the image and mask and saves them to a directory
 
-    # Return if both mask and RGB don't exist
-    if rgb_norm is None or burned_area_mask is None:
-        return
+    The images are saved in (H, W, C) and as a float from [0, 1]
+    '''
+    image, burned_area_mask = get_image_and_mask(dir, instance)
+
+    # Return if both mask and image don't exist
+    if image is None or burned_area_mask is None:
+        return False
 
     if DEBUG:
-        # plot_burned_area_mask(burned_area_mask)
-        plot_highlighted_rgb_and_mask(rgb_norm, burned_area_mask)
+        rgb, infared = seperate_visible_and_infrared(image)
+        # plot_highlighted_rgb_and_mask(rgb, burned_area_mask, only_burned=True)
+        plot_rgb(infared)
+        # plot_highlighted_rgb_and_mask(infared, burned_area_mask, only_burned=True)
+        plot_burned_area_mask(burned_area_mask)
 
         # plot dist of each channel
-        for i in range(3):
-            plt.figure(figsize=(10, 10))
-            plt.hist(rgb_norm[:, :, i].flatten()[rgb_norm[:, :, i].flatten() != 0], bins=256)
-            plt.show()
+        fig, ax = plt.subplots(2, 3, figsize=(10, 5))
+        for i, name in enumerate(BANDS):
+            ax[i // 3, i % 3].set_title(name)
+            ax[i // 3, i % 3].hist(image[:, :, i].flatten()[image[:, :, i].flatten() != 0], bins=256)
+        fig.tight_layout()
+        fig.show()
 
-    # Extract blocks from the RGB image and mask
-    rgb_blocks = extract_blocks(rgb_norm, block_size)
+    # Extract blocks from the image and mask
+    image_blocks = extract_blocks(image, block_size)
     mask_blocks = extract_blocks(burned_area_mask, block_size)
 
     # Make a directory to save the blocks
-    save_dir = "new_data/"
     if not os.path.exists(save_dir):
         os.makedirs(save_dir)
 
-    # save idxes of blocks that have something
-    something_idxes = [i for i, rgb_block in enumerate(rgb_blocks) if np.sum(rgb_block) > 0]
-    for idx in something_idxes:
+    # remove blocks with no data in the image
+    images_w_stuff_idxes = [i for i, image_block in enumerate(image_blocks) if np.sum(image_block) > 0]
+
+    # remove blocks with no burned area in the mask
+    masks_w_burned_area_idxes = [i for i, mask_block in enumerate(mask_blocks) if np.sum(mask_block == 1) > 0]
+    if extract_only_burned:
+        save_idxes = [i for i in images_w_stuff_idxes if i in masks_w_burned_area_idxes]
+    else:
+        save_idxes = images_w_stuff_idxes
+
+    # visualize the blocks
+    # if DEBUG:
+        # for idx in save_idxes:
+        #     rgb, infared = seperate_visible_and_infrared(image_blocks[idx])
+        #     plot_rgb(rgb)
+        #     plot_rgb(infared)
+        #     plot_burned_area_mask(mask_blocks[idx])
+
+    # save the blocks
+    for idx in save_idxes:
         data = {
-            "rgb": rgb_blocks[idx],
+            "image": image_blocks[idx],
             "mask": mask_blocks[idx]
         }
         np.savez(f"{save_dir}/{instance}_block_{idx}.npz", **data)
+    return True
 
 
 # List of band files
@@ -133,10 +163,15 @@ BANDS = [
     "_SR_B4.TIF",  # Red
     "_SR_B3.TIF",  # Green
     "_SR_B2.TIF",  # Blue
+    "_SR_B7.TIF",  # SWIR2 (Shortwave Infrared 2100nm-2300nm)
+    "_SR_B5.TIF",  # NIR (Near Infrared)
+    "_SR_B6.TIF",  # SWIR1 (Shortwave Infrared 1560nm-1660nm)
 ]
-DEBUG = False
 
+# Parameters
+DEBUG = False
 dir = "/mnt/csdrive/landsat/combined/"
+save_dir = "data_infrared/"
 
 # Search for instances
 instances = set()
@@ -148,10 +183,14 @@ print(f"Found {len(instances)} instances")
 
 # Iterate over instances and extract blocks into data folder
 for instance in tqdm(instances):
-    extract_blocks_from_dir(dir, instance, block_size=512)
+    extract_blocks_from_dir(dir, instance, block_size=256, extract_only_burned=True)
+
+
+
 
 '''
-# for copying instances that have both an image and mask
+# ignore this, this was temporary code for copying instances that have both an image and mask
+# just in case i need to do this again
 import shutil
 def copy_all_files(instance, source_dir, target_dir):
     for file in os.listdir(source_dir):

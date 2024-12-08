@@ -1,6 +1,10 @@
 /data/
 /data_full/
 /data_full_burned/
+/data_infrared/
+/data_infrared_split/
+
+*.pt
 
 README.html
 __pycache__/

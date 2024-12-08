@@ -14,10 +14,10 @@ class SatteliteImageDataset(Dataset):
     augment_transform: A.Compose
     preprocess_transform: A.Compose
 
-    def __init__(self, data_dir: str, preprocess_transform: A.Compose=None, transform: A.Compose=None) -> None:
+    def __init__(self, data_dir: str, preprocess_transform: A.Compose=None, augment_transform: A.Compose=None) -> None:
         self.data_dir = data_dir
         self.preprocess_transform = preprocess_transform
-        self.augment_transform = transform
+        self.augment_transform = augment_transform
         self.file_list = [f for f in os.listdir(data_dir) if f.endswith('npz')]
 
     def __len__(self):
@@ -39,18 +39,18 @@ class SatteliteImageDataset(Dataset):
         # Load the data
         file_path = os.path.join(self.data_dir, self.file_list[idx])
         data = np.load(file_path)
-        rgb = data['rgb']
+        image = data['image']
         mask = data['mask']
 
         # Add the preprocess transform (normalization)
         if self.preprocess_transform:
-            rgb, mask = self.apply_transforms(self.preprocess_transform, rgb, mask)
+            image, mask = self.apply_transforms(self.preprocess_transform, image, mask)
 
         # Add the augment transform (for training)
         if self.augment_transform:
-            rgb, mask = self.apply_transforms(self.augment_transform, rgb, mask)
+            image, mask = self.apply_transforms(self.augment_transform, image, mask)
 
         # Convert to torch tensor
-        rgb, mask = self.apply_transforms(DEFAULT, rgb, mask)
+        image, mask = self.apply_transforms(DEFAULT, image, mask)
 
-        return rgb, mask
+        return image, mask

@@ -1,3 +1,4 @@
+import os
 import random
 import torch
 from torch.utils.data import DataLoader, random_split
@@ -9,7 +10,7 @@ class SatelliteImageDataLoader:
     val_dataset: SatteliteImageDataset
     test_dataset: SatteliteImageDataset
 
-    def __init__( self, data_dir, batch_size=32, train_ratio=0.7, val_ratio=0.15, test_ratio=0.15, seed=None, preprocess_transform=None, transform=None,):
+    def __init__( self, data_dir, batch_size=32, seed=None, preprocess_transform=None, transform=None,):
         self.data_dir = data_dir
         self.batch_size = batch_size
         self.preprocess_transform = preprocess_transform
@@ -18,25 +19,19 @@ class SatelliteImageDataLoader:
         self.gen = torch.Generator()
         self.gen.manual_seed(self.seed)
 
-        # create the full dataset
-        self.full_dataset = SatteliteImageDataset(data_dir, preprocess_transform)
+        # Check for train, val, and test directories
+        assert os.path.exists(os.path.join(self.data_dir, 'train')), f"Train directory does not exist: {os.path.join(self.data_dir, 'train')}"
+        assert os.path.exists(os.path.join(self.data_dir, 'val')), f"Val directory does not exist: {os.path.join(self.data_dir, 'val')}"
+        assert os.path.exists(os.path.join(self.data_dir, 'test')), f"Test directory does not exist: {os.path.join(self.data_dir, 'test')}"
 
-        # calculate split sizes
-        total_size = len(self.full_dataset)
-        train_size = int(train_ratio * total_size)
-        val_size = int(val_ratio * total_size)
-        test_size = total_size - train_size - val_size
+        # Create all the datasets
+        #   Note: Add the augmentations to only the train dataset
+        self.train_dataset = SatteliteImageDataset(os.path.join(self.data_dir, 'train'), preprocess_transform=self.preprocess_transform, augment_transform=self.augment_transform)
+        self.val_dataset = SatteliteImageDataset(os.path.join(self.data_dir, 'val'), preprocess_transform=self.preprocess_transform)
+        self.test_dataset = SatteliteImageDataset(os.path.join(self.data_dir, 'test'), preprocess_transform=self.preprocess_transform)
 
-        # Make sure the split sizes add up to the total size
-        assert train_size + val_size + test_size == total_size, "Split sizes do not add up to total size"
-
-        # split the dataset
-        self.train_dataset, self.val_dataset, self.test_dataset = random_split(
-            self.full_dataset, [train_size, val_size, test_size], generator=self.gen
-        )
-
-        # Add the augmentations to only the train dataset
-        self.train_dataset.augment_transform = self.augment_transform
+        # Total number of images
+        self.size = len(self.train_dataset) + len(self.val_dataset) + len(self.test_dataset)
 
     def get_train_dataloader(self):
         return DataLoader( self.train_dataset, batch_size=self.batch_size, shuffle=True, generator=self.gen)
@@ -51,4 +46,4 @@ class SatelliteImageDataLoader:
         return self.get_train_dataloader(), self.get_val_dataloader(), self.get_test_dataloader()
 
     def __len__(self) -> int:
-        return len(self.full_dataset)
+        return self.size
