@@ -3,3 +3,7 @@ torch
 visdom
 tqdm
 torchmetrics
+rasterio
+geopandas
+folium
+keplergl
