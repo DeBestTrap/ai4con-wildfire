@@ -1,0 +1,32 @@
+experiment_config:
+  loader_params:
+    data_dir: "./data_infrared_split"
+    batch_size: 32
+    seed: null
+  train:
+    max_epochs: 75
+    save_on_metric: "best_dice"
+  criterion:
+    name: "BCEWithLogitsLoss"
+    # name: "FocalLoss"
+    # alpha: 1
+    # gamma: 2
+  optimizer:
+    name: "AdamW"
+    lr: 0.0001
+transforms:
+  - name: "HorizontalFlip"
+    params:
+      p: 0.5
+  - name: "VerticalFlip"
+    params:
+      p: 0.5
+  - name: "RandomRotate90"
+    params:
+      p: 0.5
+  - name: "Transpose"
+    params:
+      p: 0.5
+  # - name: "RandomBrightnessContrast"
+  #   params:
+  #     p: 0.2
