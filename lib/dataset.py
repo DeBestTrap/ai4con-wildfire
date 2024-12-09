@@ -44,6 +44,8 @@ class SatteliteImageDataset(Dataset):
         file_path = os.path.join(self.data_dir, self.file_list[idx])
         data = np.load(file_path)
         image = data["image"]
+        # remove 3 infared bands
+        image = image[:, :, :3]
         mask = data["mask"]
 
         # Add the preprocess transform (normalization)

@@ -51,6 +51,11 @@ with open(
     os.path.join(experiment_config["loader_params"]["data_dir"], "mean_std.json"), "r"
 ) as f:
     mean_std = json.load(f)
+
+# remove infared channels from mean and std
+mean_std["mean"] = mean_std["mean"][:3]
+mean_std["std"] = mean_std["std"][:3]
+
 preprocess_transform = A.Compose(
     [
         A.Normalize(mean=mean_std["mean"], std=mean_std["std"], max_pixel_value=1.0),
@@ -88,10 +93,10 @@ def deeplabv3_init() -> torch.nn.Module:
     # model = torch.hub.load('pytorch/vision:v0.10.0', 'deeplabv3_resnet101', pretrained=True)
     # model = torch.hub.load('pytorch/vision:v0.10.0', 'deeplabv3_mobilenet_v3_large', pretrained=True)
 
-    # Modify the input to accept 6 channels
-    model.backbone.conv1 = torch.nn.Conv2d(
-        6, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3), bias=False
-    )
+    # # Modify the input to accept 6 channels
+    # model.backbone.conv1 = torch.nn.Conv2d(
+    #     6, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3), bias=False
+    # )
 
     # Modify the classifier to output binary class
     model.classifier[4] = torch.nn.Conv2d(256, 1, kernel_size=(1, 1), stride=(1, 1))
