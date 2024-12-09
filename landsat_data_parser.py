@@ -110,13 +110,15 @@ def extract_blocks_from_dir(dir, instance, block_size, extract_only_burned=False
     if DEBUG:
         rgb, infared = seperate_visible_and_infrared(image)
         # plot_highlighted_rgb_and_mask(rgb, burned_area_mask, only_burned=True)
+        plot_rgb(rgb)
         plot_rgb(infared)
         # plot_highlighted_rgb_and_mask(infared, burned_area_mask, only_burned=True)
-        plot_burned_area_mask(burned_area_mask)
+        # plot_burned_area_mask(burned_area_mask)
+        plot_mask(burned_area_mask)
 
         # plot dist of each channel
         fig, ax = plt.subplots(2, 3, figsize=(10, 5))
-        for i, name in enumerate(BANDS):
+        for i, name in enumerate(names):
             ax[i // 3, i % 3].set_title(name)
             ax[i // 3, i % 3].hist(image[:, :, i].flatten()[image[:, :, i].flatten() != 0], bins=256)
         fig.tight_layout()
@@ -141,12 +143,12 @@ def extract_blocks_from_dir(dir, instance, block_size, extract_only_burned=False
         save_idxes = images_w_stuff_idxes
 
     # visualize the blocks
-    # if DEBUG:
-        # for idx in save_idxes:
-        #     rgb, infared = seperate_visible_and_infrared(image_blocks[idx])
-        #     plot_rgb(rgb)
-        #     plot_rgb(infared)
-        #     plot_burned_area_mask(mask_blocks[idx])
+    if DEBUG:
+        for idx in save_idxes:
+            rgb, infared = seperate_visible_and_infrared(image_blocks[idx])
+            plot_rgb(rgb)
+            plot_rgb(infared)
+            plot_burned_area_mask(mask_blocks[idx])
 
     # save the blocks
     for idx in save_idxes:
@@ -167,9 +169,10 @@ BANDS = [
     "_SR_B5.TIF",  # NIR (Near Infrared)
     "_SR_B6.TIF",  # SWIR1 (Shortwave Infrared 1560nm-1660nm)
 ]
+names = ["red", "green", "blue", "swir2", "nir", "swir1"]
 
 # Parameters
-DEBUG = False
+DEBUG = True
 dir = "/mnt/csdrive/landsat/combined/"
 save_dir = "data_infrared/"
 
@@ -182,8 +185,13 @@ for file in os.listdir(dir):
 print(f"Found {len(instances)} instances")
 
 # Iterate over instances and extract blocks into data folder
+# ctr = 0
 for instance in tqdm(instances):
-    extract_blocks_from_dir(dir, instance, block_size=256, extract_only_burned=True)
+    a = extract_blocks_from_dir(dir, instance, block_size=256, extract_only_burned=True)
+    # if a:
+    #     ctr += 1
+    # if ctr > 3:
+    #     break
 
 
 
