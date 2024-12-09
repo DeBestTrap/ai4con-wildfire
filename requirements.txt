@@ -7,3 +7,5 @@ rasterio
 geopandas
 folium
 keplergl
+tabulate
+pandas

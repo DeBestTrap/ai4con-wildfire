@@ -78,8 +78,8 @@ def compute_loss_and_outputs(model, images, masks, criterion, device):
     masks = masks.where(masks < 2, torch.tensor(0, device=device)).float()
 
     outputs = model(images)
-    main_outputs = outputs['out'].squeeze(1)
-    aux_outputs = outputs['aux'].squeeze(1)
+    main_outputs = outputs["out"].squeeze(1)
+    aux_outputs = outputs["aux"].squeeze(1)
 
     main_loss = criterion(main_outputs, masks)
     aux_loss = criterion(aux_outputs, masks)

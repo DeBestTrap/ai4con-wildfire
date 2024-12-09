@@ -27,13 +27,9 @@ from lib.evaluate import evaluate
 
 # Parse command line arguments
 parser = argparse.ArgumentParser()
-parser.add_argument('-n', '--name', type=str, required=False)
-parser.add_argument('-c', '--config', type=str, required=True)
+parser.add_argument("-n", "--name", type=str, required=False)
+parser.add_argument("-c", "--config", type=str, required=True)
 args = parser.parse_args()
-
-# Initialize Visdom instance
-viz = Visdom(env="ai4con-wildfire")
-assert viz.check_connection(), "Visdom server is not running!"
 
 # Create experiment directory
 current_time = time.strftime("%Y%m%d-%H%M%S")
@@ -42,29 +38,44 @@ experiment_dir = os.path.join("experiments", experiment_name)
 if not os.path.exists(experiment_dir):
     os.makedirs(experiment_dir)
 
+# Initialize Visdom instance
+viz = Visdom(env=f"ai4con-wildfire/{experiment_name}")
+assert viz.check_connection(), "Visdom server is not running!"
+
 # Load experiment configuration
 experiment_config, augment_transform = load_config(config_path=args.config)
 shutil.copyfile(args.config, os.path.join(experiment_dir, "config.yml"))
 
 # Get mean and std of each channel from file for normalization preprocessing transform
-with open(os.path.join(experiment_config['loader_params']['data_dir'], 'mean_std.json'), 'r') as f:
+with open(
+    os.path.join(experiment_config["loader_params"]["data_dir"], "mean_std.json"), "r"
+) as f:
     mean_std = json.load(f)
-preprocess_transform = A.Compose([
-    A.Normalize(mean=mean_std['mean'], std=mean_std['std'], max_pixel_value=1.0),
-])
+preprocess_transform = A.Compose(
+    [
+        A.Normalize(mean=mean_std["mean"], std=mean_std["std"], max_pixel_value=1.0),
+    ]
+)
 
 # Create inverse normalization transform for visualization purposes later
-inverse_normalize_transform = A.Compose([
-    InverseNormalize(mean=mean_std['mean'], std=mean_std['std']),
-])
+inverse_normalize_transform = A.Compose(
+    [
+        InverseNormalize(mean=mean_std["mean"], std=mean_std["std"]),
+    ]
+)
 
-loader = SatelliteImageDataLoader(**experiment_config['loader_params'], preprocess_transform=preprocess_transform, transform=augment_transform)
+loader = SatelliteImageDataLoader(
+    **experiment_config["loader_params"],
+    preprocess_transform=preprocess_transform,
+    transform=augment_transform,
+)
 print(f"Total number of images: {len(loader)}")
 
 train_loader, val_loader, test_loader = loader.get_all_loaders()
 print(f"Number of images in train dataset: {len(train_loader.dataset)}")
 print(f"Number of images in val dataset: {len(val_loader.dataset)}")
 print(f"Number of images in test dataset: {len(test_loader.dataset)}")
+
 
 def deeplabv3_init() -> torch.nn.Module:
     """
@@ -77,8 +88,10 @@ def deeplabv3_init() -> torch.nn.Module:
     # model = torch.hub.load('pytorch/vision:v0.10.0', 'deeplabv3_resnet101', pretrained=True)
     # model = torch.hub.load('pytorch/vision:v0.10.0', 'deeplabv3_mobilenet_v3_large', pretrained=True)
 
-   # Modify the input to accept 6 channels
-    model.backbone.conv1 = torch.nn.Conv2d(6, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3), bias=False)
+    # Modify the input to accept 6 channels
+    model.backbone.conv1 = torch.nn.Conv2d(
+        6, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3), bias=False
+    )
 
     # Modify the classifier to output binary class
     model.classifier[4] = torch.nn.Conv2d(256, 1, kernel_size=(1, 1), stride=(1, 1))
@@ -102,14 +115,15 @@ def output_transform(raw_output: OrderedDict) -> torch.Tensor:
     output = raw_output["out"]
     return output
 
+
 def predict_mask(model: torch.nn.Module, rgb: torch.Tensor) -> torch.Tensor:
-    '''
+    """
     Takes in a batch of rgb images
         Size: [batch_size, 3, height, width]
         or [3, height, width] (will be resized to [1, 3, height, width])
 
     Returns a batch of predicted masks of size [batch_size, height, width]
-    '''
+    """
     if rgb.ndim == 3:
         rgb = rgb.unsqueeze(0)
 
@@ -124,6 +138,7 @@ def predict_mask(model: torch.nn.Module, rgb: torch.Tensor) -> torch.Tensor:
 
     return batch_pred_mask
 
+
 class FocalLoss(nn.Module):
     def __init__(self, alpha=1, gamma=2):
         super(FocalLoss, self).__init__()
@@ -131,14 +146,26 @@ class FocalLoss(nn.Module):
         self.gamma = gamma
 
     def forward(self, inputs, targets):
-        BCE_loss = nn.BCEWithLogitsLoss(reduction='none')(inputs, targets)
+        BCE_loss = nn.BCEWithLogitsLoss(reduction="none")(inputs, targets)
         pt = torch.exp(-BCE_loss)  # Probability of correct prediction
-        F_loss = self.alpha * (1-pt)**self.gamma * BCE_loss
+        F_loss = self.alpha * (1 - pt) ** self.gamma * BCE_loss
         return F_loss.mean()
 
+
 def train(max_epochs: int, save_on_metric: str, viz: Visdom) -> None:
-    train_multiple_epochs(model, train_loader, val_loader, criterion, optimizer,
-                          device, max_epochs, save_on_metric, experiment_dir, viz)
+    train_multiple_epochs(
+        model,
+        train_loader,
+        val_loader,
+        criterion,
+        optimizer,
+        device,
+        max_epochs,
+        save_on_metric,
+        experiment_dir,
+        viz,
+    )
+
 
 def show_an_output():
     # temp function
@@ -146,10 +173,12 @@ def show_an_output():
     model.eval()
     with torch.no_grad():
         for batch in train_loader:
-            image, mask = batch 
+            image, mask = batch
             image = image[0]
             mask = mask[0]
-            rgb, infrared = seperate_visible_and_infrared(unprocess_image(image, inverse_normalize_transform))
+            rgb, infrared = seperate_visible_and_infrared(
+                unprocess_image(image, inverse_normalize_transform)
+            )
             if 1 in mask:
                 print("Found mask")
                 plot_rgb(rgb)
@@ -159,18 +188,23 @@ def show_an_output():
                 plot_mask(batch_pred_mask[0])
                 return
 
+
 def eval_model(save_on_metric: str, loader: DataLoader, name: str, **kwargs):
-    model.load_state_dict(torch.load(os.path.join(experiment_dir, f"model_{save_on_metric}.pt")))
+    model.load_state_dict(
+        torch.load(os.path.join(experiment_dir, f"model_{save_on_metric}.pt"))
+    )
     model.eval()
     with torch.no_grad():
-        val_loss, iou_score, dice_score, pixel_acc = evaluate(model, loader, criterion, device)
-    
+        val_loss, iou_score, dice_score, pixel_acc = evaluate(
+            model, loader, criterion, device
+        )
+
     # dump results json
     results = {
         "val_loss": val_loss,
         "iou_score": iou_score,
         "dice_score": dice_score,
-        "pixel_acc": pixel_acc
+        "pixel_acc": pixel_acc,
     }
     with open(os.path.join(experiment_dir, f"results_{name}.json"), "w") as f:
         json.dump(results, f)
@@ -184,22 +218,24 @@ def get_criterion(name: str, **kwargs) -> torch.nn.Module:
     else:
         raise ValueError(f"Unknown criterion: {name}")
 
+
 def get_optimizer(model: torch.nn.Module, name: str, **kwargs) -> torch.optim.Optimizer:
     if name == "AdamW":
         return torch.optim.AdamW(model.parameters(), **kwargs)
     else:
         raise ValueError(f"Unknown optimizer: {name}")
 
+
 device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
 # model = ModelWrapper(deeplabv3_init(), output_transform=output_transform)
 model = deeplabv3_init()
 model.to(device)
-criterion = get_criterion(**experiment_config['criterion'])
-optimizer = get_optimizer(model, **experiment_config['optimizer'])
+criterion = get_criterion(**experiment_config["criterion"])
+optimizer = get_optimizer(model, **experiment_config["optimizer"])
 
-train(**experiment_config['train'], viz=viz)
-eval_model(**experiment_config['train'], loader=val_loader, name="val")
-eval_model(**experiment_config['train'], loader=test_loader, name="test")
+train(**experiment_config["train"], viz=viz)
+eval_model(**experiment_config["train"], loader=val_loader, name="val")
+eval_model(**experiment_config["train"], loader=test_loader, name="test")
 # show_an_output()
 
 # %%

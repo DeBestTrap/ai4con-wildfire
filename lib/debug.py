@@ -20,7 +20,9 @@ def convert_to_numpy(tensor: np.ndarray | torch.Tensor) -> np.ndarray:
         raise TypeError("tensor must be a numpy array or a torch tensor")
 
 
-def unprocess_image(tensor: np.ndarray | torch.Tensor, inverse_normalize_transform: A.Compose) -> np.ndarray:
+def unprocess_image(
+    tensor: np.ndarray | torch.Tensor, inverse_normalize_transform: A.Compose
+) -> np.ndarray:
     """
     Unprocess a tensor (C, H, W) that was used for training.
     This is also assuming that the tensor is always normalized and will be denormalized.
@@ -29,14 +31,17 @@ def unprocess_image(tensor: np.ndarray | torch.Tensor, inverse_normalize_transfo
     """
     if type(tensor) == torch.Tensor:
         tensor = tensor.detach().cpu().numpy()
-    
+
     image = tensor.transpose(1, 2, 0)
 
-    return inverse_normalize_transform(image=image)['image']
+    return inverse_normalize_transform(image=image)["image"]
 
-'''
+
+"""
 -------------------- Ploting functions for masks
-'''
+"""
+
+
 def get_colored_mask(mask: np.ndarray, only_burned=False) -> np.ndarray:
     """
     Key:
@@ -93,9 +98,11 @@ def plot_burned_area_mask(mask: np.ndarray | torch.Tensor) -> None:
     plt.show()
 
 
-'''
+"""
 -------------------- Ploting functions for RGB images
-'''
+"""
+
+
 def plot_rgb(rgb: np.ndarray | torch.Tensor) -> None:
     """
     Plot a RGB image stored with uint8 [0, 255] or float [0, 1]
@@ -113,9 +120,11 @@ def plot_rgb(rgb: np.ndarray | torch.Tensor) -> None:
     plt.show()
 
 
-'''
+"""
 -------------------- Ploting functions for combined RGB images and masks
-'''
+"""
+
+
 def plot_highlighted_rgb_and_mask(
     rgb: np.ndarray | torch.Tensor,
     mask: np.ndarray | torch.Tensor,
