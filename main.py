@@ -35,8 +35,8 @@ args = parser.parse_args()
 current_time = time.strftime("%Y%m%d-%H%M%S")
 experiment_name = f"{current_time}_{args.name}"
 experiment_dir = os.path.join("experiments", experiment_name)
-if not os.path.exists(experiment_dir):
-    os.makedirs(experiment_dir)
+# if not os.path.exists(experiment_dir):
+#     os.makedirs(experiment_dir)
 
 # Initialize Visdom instance
 viz = Visdom(env=f"ai4con-wildfire/{experiment_name}")
@@ -44,7 +44,7 @@ assert viz.check_connection(), "Visdom server is not running!"
 
 # Load experiment configuration
 experiment_config, augment_transform = load_config(config_path=args.config)
-shutil.copyfile(args.config, os.path.join(experiment_dir, "config.yml"))
+# shutil.copyfile(args.config, os.path.join(experiment_dir, "config.yml"))
 
 # Get mean and std of each channel from file for normalization preprocessing transform
 with open(
@@ -174,24 +174,35 @@ def train(max_epochs: int, save_on_metric: str, viz: Visdom) -> None:
 
 def show_an_output():
     # temp function
-    model.load_state_dict(torch.load("model.pt"))
+    baseline = "experiments/20241208-234726_baseline/model_best_dice.pt"
+    model.load_state_dict(torch.load(baseline))
     model.eval()
+
+    ctr = 0
     with torch.no_grad():
-        for batch in train_loader:
+        for batch in val_loader:
             image, mask = batch
             image = image[0]
             mask = mask[0]
-            rgb, infrared = seperate_visible_and_infrared(
-                unprocess_image(image, inverse_normalize_transform)
-            )
+            # rgb, infrared = seperate_visible_and_infrared(
+            #     unprocess_image(image, inverse_normalize_transform)
+            # )
+            rgb = image
             if 1 in mask:
                 print("Found mask")
-                plot_rgb(rgb)
-                plot_mask(mask)
+                # plot_rgb(rgb)
+                # plot_mask(mask)
                 batch_image = image.unsqueeze(0).to(device)
                 batch_pred_mask = predict_mask(model, batch_image)
-                plot_mask(batch_pred_mask[0])
+                # plot_mask(batch_pred_mask[0])
+                rgb = unprocess_image(rgb, inverse_normalize_transform)
+                plot_highlighted_rgb_and_mask(rgb, mask, only_burned=True)
+                plot_highlighted_rgb_and_mask(rgb, batch_pred_mask[0], only_burned=True)
+                ctr += 1
+            if ctr > 4:
                 return
+
+
 
 
 def eval_model(save_on_metric: str, loader: DataLoader, name: str, **kwargs):
@@ -238,9 +249,9 @@ model.to(device)
 criterion = get_criterion(**experiment_config["criterion"])
 optimizer = get_optimizer(model, **experiment_config["optimizer"])
 
-train(**experiment_config["train"], viz=viz)
-eval_model(**experiment_config["train"], loader=val_loader, name="val")
-eval_model(**experiment_config["train"], loader=test_loader, name="test")
-# show_an_output()
+# train(**experiment_config["train"], viz=viz)
+# eval_model(**experiment_config["train"], loader=val_loader, name="val")
+# eval_model(**experiment_config["train"], loader=test_loader, name="test")
+show_an_output()
 
 # %%
