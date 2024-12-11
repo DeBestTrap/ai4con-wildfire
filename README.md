@@ -1,4 +1,10 @@
 # ai4con-wildfire
+CSCI 4695 and 6965: AI for Conservation
+
+Fall Semester, 2024
+
+Tre’Vaughn Barboza, Jaswanth Duddu, Tyler Chan, Danilo Nieto
+
 ## Project Description
 
 Forest fires cause severe environmental, economic, and social damage, including habitat loss, soil degradation, greenhouse gas emissions, and threats to human life and infrastructure. Effective wildfire control and recovery require precise detection and mapping of burned areas. Rapid and detailed mapping enhances disaster response, resource allocation, ecosystem restoration, and policy-making. It informs land-use decisions, fire management strategies, and climate adaptation efforts. This project leverages advanced AI algorithms to offer scalable, reliable solutions for detecting and mapping burned areas, addressing a globally critical challenge.
