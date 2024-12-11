@@ -144,24 +144,29 @@ def show_an_output():
                 return
 
 
-def eval_model(save_on_metric: str, loader: DataLoader, name: str, **kwargs):
+def eval_model(save_on_metric: str, threshold: float, loader: DataLoader, name: str, **kwargs):
     model.load_state_dict(
         torch.load(os.path.join(experiment_dir, f"model_{save_on_metric}.pt"))
     )
     model.eval()
     with torch.no_grad():
-        val_loss, iou_score, dice_score, pixel_acc = evaluate(
-            model, loader, criterion, device
+        val_loss, iou_score, dice_score, pixel_acc, tp_tn_fp_fn_total = evaluate(
+            model, loader, criterion, threshold, device
         )
 
     # dump results json
     results = {
+        "threshold": threshold,
         "val_loss": val_loss,
         "iou_score": iou_score,
         "dice_score": dice_score,
         "pixel_acc": pixel_acc,
+        "TP": tp_tn_fp_fn_total["TP"],
+        "TN": tp_tn_fp_fn_total["TN"],
+        "FP": tp_tn_fp_fn_total["FP"],
+        "FN": tp_tn_fp_fn_total["FN"],
     }
-    with open(os.path.join(experiment_dir, f"results_{name}.json"), "w") as f:
+    with open(os.path.join(experiment_dir, f"results_{name}_{threshold}.json"), "w") as f:
         json.dump(results, f)
 
 
@@ -242,8 +247,10 @@ if __name__ == "__main__":
     optimizer = get_optimizer(model, **experiment_config["optimizer"])
 
     train(**experiment_config["train"], viz=viz)
-    eval_model(**experiment_config["train"], loader=val_loader, name="val")
-    eval_model(**experiment_config["train"], loader=test_loader, name="test")
+    eval_model(**experiment_config["train"], threshold=0.5, loader=val_loader, name="val")
+    for threshold in np.linspace(0.1, 0.9, 9):
+        threshold = round(threshold, 2)
+        eval_model(**experiment_config["train"], threshold=threshold, loader=test_loader, name="test")
     # show_an_output()
 
 # %%

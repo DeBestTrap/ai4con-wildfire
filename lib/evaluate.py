@@ -6,7 +6,7 @@ from lib.metrics.dice import dice_coefficient
 from lib.metrics.iou import iou
 
 
-def evaluate(model, loader, criterion, device):
+def evaluate(model, loader, criterion, threshold, device):
     """
     Evaluate the model on data and compute metrics and loss.
 
@@ -14,10 +14,11 @@ def evaluate(model, loader, criterion, device):
         model (torch.nn.Module): The model to evaluate.
         loader (DataLoader): The DataLoader for the validation set.
         criterion (torch.nn.Module): The loss function.
+        threshold (float): The threshold for post-processing predictions.
         device (torch.device): The device to use for evaluation.
 
     Returns:
-        Tuple: Average validation loss, IoU, Dice Coefficient, and Pixel Accuracy.
+        Tuple: Average validation loss, IoU, Dice Coefficient, Pixel Accuracy, and TP, TN, FP, FN.
     """
     with torch.no_grad():
         model.eval()
@@ -25,6 +26,7 @@ def evaluate(model, loader, criterion, device):
         iou_scores = []
         dice_scores = []
         pixel_accs = []
+        tp_tn_fp_fn_total = {"TP": 0, "TN": 0, "FP": 0, "FN": 0}
 
         for images, masks in loader:
             loss, main_outputs, masks = compute_loss_and_outputs(
@@ -32,7 +34,7 @@ def evaluate(model, loader, criterion, device):
             )
             val_loss += loss
 
-            preds = post_process_predictions(main_outputs)
+            preds = post_process_predictions(main_outputs, threshold)
             clean_masks, clean_preds = clean_masks_and_predictions(masks, preds)
 
             masks_tensor = torch.stack(clean_masks)
@@ -42,6 +44,11 @@ def evaluate(model, loader, criterion, device):
             iou_scores.extend(iou(masks_tensor, preds_tensor).tolist())
             dice_scores.extend(dice_coefficient(masks_tensor, preds_tensor).tolist())
             pixel_accs.extend(pixel_accuracy(masks_tensor, preds_tensor).tolist())
+
+            # Calculate TP, TN, FP, FN
+            tp_tn_fp_fn = calculate_tp_tn_fp_fn(preds_tensor, masks_tensor)
+            for key, value in tp_tn_fp_fn.items():
+                tp_tn_fp_fn_total[key] += value
 
         # Calculate averages
         avg_loss = val_loss / len(loader)
@@ -56,8 +63,34 @@ def evaluate(model, loader, criterion, device):
         # print(f"Average Dice Coefficient: {avg_dice:.4f}")
         # print(f"Average Pixel Accuracy: {avg_pixel_acc:.4f}")
 
-        return avg_loss, avg_iou, avg_dice, avg_pixel_acc
+        return avg_loss, avg_iou, avg_dice, avg_pixel_acc, tp_tn_fp_fn_total
 
+def calculate_tp_tn_fp_fn(pred_mask, true_mask):
+    """
+    Calculate TP, TN, FP, FN pixels from predicted and true masks.
+
+    Parameters:
+        pred_mask (torch.Tensor): Predicted binary mask.
+        true_mask (torch.Tensor): Ground truth binary mask.
+
+    Returns:
+        dict: Dictionary containing TP, TN, FP, FN counts.
+    """
+    if pred_mask.shape != true_mask.shape:
+        raise ValueError("Predicted and true masks must have the same shape.")
+
+    # Calculate components
+    TP = torch.sum((pred_mask == 1) & (true_mask == 1)).item()
+    TN = torch.sum((pred_mask == 0) & (true_mask == 0)).item()
+    FP = torch.sum((pred_mask == 1) & (true_mask == 0)).item()
+    FN = torch.sum((pred_mask == 0) & (true_mask == 1)).item()
+
+    return {
+        'TP': TP,
+        'TN': TN,
+        'FP': FP,
+        'FN': FN
+    }
 
 def compute_loss_and_outputs(model, images, masks, criterion, device):
     """
@@ -88,17 +121,18 @@ def compute_loss_and_outputs(model, images, masks, criterion, device):
     return loss.item(), main_outputs, masks
 
 
-def post_process_predictions(main_outputs):
+def post_process_predictions(main_outputs, threshold):
     """
     Apply sigmoid and threshold to generate binary predictions.
 
     Parameters:
         main_outputs (torch.Tensor): The main model outputs.
+        threshold (float): The threshold value.
 
     Returns:
         torch.Tensor: Binary predictions.
     """
-    return (torch.sigmoid(main_outputs) > 0.5).cpu()
+    return (torch.sigmoid(main_outputs) > threshold).cpu()
 
 
 def clean_masks_and_predictions(masks, preds):

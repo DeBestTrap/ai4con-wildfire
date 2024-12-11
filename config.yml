@@ -7,10 +7,10 @@ experiment_config:
     max_epochs: 75
     save_on_metric: "best_dice"
   criterion:
-    name: "BCEWithLogitsLoss"
-    # name: "FocalLoss"
-    # alpha: 1
-    # gamma: 2
+    # name: "BCEWithLogitsLoss"
+    name: "FocalLoss"
+    alpha: 1
+    gamma: 2
   optimizer:
     name: "AdamW"
     lr: 0.0001
